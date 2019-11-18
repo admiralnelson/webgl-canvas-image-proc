@@ -259,92 +259,49 @@ function InitWebGL()
 
             // The texture.
             uniform sampler2D u_sampler;
-            
-            vec4 blur9(sampler2D image, vec2 uv, vec2 resolution, vec2 direction) {
-              vec4 color = vec4(0.0);
-              vec2 off1 = vec2(1.3846153846) * direction;
-              vec2 off2 = vec2(3.2307692308) * direction;
-              color += texture2D(image, uv) * 0.2270270270;
-              color += texture2D(image, uv + (off1 / resolution)) * 0.3162162162;
-              color += texture2D(image, uv - (off1 / resolution)) * 0.3162162162;
-              color += texture2D(image, uv + (off2 / resolution)) * 0.0702702703;
-              color += texture2D(image, uv - (off2 / resolution)) * 0.0702702703;
-              return color;
-            }
 
+ const            int   c_samplesX    = 15;  // must be odd
+const int   c_samplesY    = 15;  // must be odd
+const float c_textureSize = 512.0;
 
+const int   c_halfSamplesX = c_samplesX / 2;
+const int   c_halfSamplesY = c_samplesY / 2;
+const float c_pixelSize = (1.0 / c_textureSize);
 
-float SCurve (float x) {
-	
-    
-    // ---- by CeeJayDK
-
-		x = x * 2.0 - 1.0;
-		return -x * abs(x) * 0.5 + x + 0.5;
-		
-        //return dot(vec3(-x, 2.0, 1.0 ),vec3(abs(x), x, 1.0)) * 0.5; // possibly faster version
-	
-
-    
-    
-    // ---- original for posterity
-    
-    // How to do this without if-then-else?
-    // +edited the too steep curve value
-    
-    // if (value < 0.5)
-    // {
-    //    return value * value * 2.0;
-    // }
-    
-    // else
-    // {
-    // 	value -= 1.0;
-    
-    // 	return 1.0 - value * value * 2.0;
-    // }
+float Gaussian (float sigma, float x)
+{
+    return exp(-(x*x) / (2.0 * sigma*sigma));
 }
 
-vec4 BlurH (sampler2D source, vec2 size, vec2 uv, float radius) {
-
-	if (radius >= 1.0)
-	{
-		vec4 A = vec4(0.0); 
-		vec4 C = vec4(0.0); 
-
-		float width = 1.0 / size.x;
-
-		float divisor = 0.0; 
-        float weight = 0.0;
+vec3 BlurredPixel (in vec2 uv)
+{
+    float c_sigmaX      =  5.0;
+	float c_sigmaY      = c_sigmaX;
+    
+    float total = 0.0;
+    vec3 ret = vec3(0);
         
-        float radiusMultiplier = 1.0 / radius;
-        
-        // Hardcoded for radius 20 (normally we input the radius
-        // in there), needs to be literal here
-        
-		for (float x = -20.0; x <= 20.0; x++)
-		{
-			A = texture2D(source, uv + vec2(x * width, 0.0));
-            
-            	weight = SCurve(1.0 - (abs(x) * radiusMultiplier)); 
-            
-            	C += A * weight; 
-            
-			divisor += weight; 
-		}
-
-		return vec4(C.r / divisor, C.g / divisor, C.b / divisor, 1.0);
-	}
-
-	return texture2D(source, uv);
+    for (int iy = 0; iy < c_samplesY; ++iy)
+    {
+        float fy = Gaussian (c_sigmaY, float(iy) - float(c_halfSamplesY));
+        float offsety = float(iy-c_halfSamplesY) * c_pixelSize;
+        for (int ix = 0; ix < c_samplesX; ++ix)
+        {
+            float fx = Gaussian (c_sigmaX, float(ix) - float(c_halfSamplesX));
+            float offsetx = float(ix-c_halfSamplesX) * c_pixelSize;
+            total += fx * fy;            
+            ret += texture2D(u_sampler, uv + vec2(offsetx, offsety)).rgb * fx*fy;
+        }
+    }
+    return ret / total;
 }
+
 
             void main() {
                 vec4 col  = texture2D(u_sampler, v_textureCoord) ;
                 //vec4 bwCol = vec4( vec3(col.r), 1.0 );
-               gl_FragColor =  BlurH(u_sampler, vec2(1980.0, 1080.0), v_textureCoord, 20.0);//bwCol;
-
-       
+               //gl_FragColor =  BlurH(u_sampler, vec2(1980.0, 1080.0), v_textureCoord, 20.0);//bwCol;
+               gl_FragColor = vec4(BlurredPixel(v_textureCoord), 1.0);
             }`),
         vert = null,
         tex = null;
