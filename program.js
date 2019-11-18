@@ -3,7 +3,9 @@ const
     g_Context = g_Canvas.getContext("webgl");
 
 var
-    g_positionAttribute = -1;
+    g_positionAttribute = -1,
+    g_textureCoordAttribute = -1,
+    g_samplerUniform = -1;
 
 function ShaderCompile(vertexShaderSource, fragmentShaderSource)
 {
@@ -35,6 +37,8 @@ function ShaderCompile(vertexShaderSource, fragmentShaderSource)
         throw new Error(g_Context.getProgramInfoLog(shaderProgram));
 
     g_positionAttribute = g_Context.getAttribLocation(shaderProgram, "a_position");
+    g_textureCoordAttribute = g_Context.getAttribLocation(shaderProgram, "a_textureCoord");
+    g_samplerUniform = g_Context.getUniformLocation(shaderProgram, "u_sampler");
 
     return shaderProgram;
 }
@@ -43,20 +47,21 @@ function LoadVertex(data)
 {   
     if (data.constructor.name !== "Float32Array")
         throw new Error("Invalid data type expected: Float32Array");
+
+    
     if (g_positionAttribute === -1)
         throw new Error("shader not initialised");
 
+    function Vert(bufferNo, length) {
+        this.bufferNo = bufferNo;
+        this.length = length;
+    }
 
     var
         bufferNo = g_Context.createBuffer();
 
     g_Context.bindBuffer(g_Context.ARRAY_BUFFER, bufferNo);
     g_Context.bufferData(g_Context.ARRAY_BUFFER, data, g_Context.STATIC_DRAW);
-   
-    function Vert(bufferNo, length) {
-        this.bufferNo = bufferNo;
-        this.length = length;
-    }
 
     return new Vert(bufferNo, data.length);
 }
@@ -70,7 +75,7 @@ function DetroyVertex(bufferNo)
     g_Context.deleteBuffer(bufferNo);
 }
 
-function Draw(vert)
+function Draw(vert, texture)
 {
     if (vert.constructor.name !== "Vert")
         throw new Error("Invalid vert type expected: Vert");
@@ -78,7 +83,10 @@ function Draw(vert)
     g_Context.bindBuffer(g_Context.ARRAY_BUFFER, vert.bufferNo);
     g_Context.enableVertexAttribArray(g_positionAttribute);
     g_Context.vertexAttribPointer(g_positionAttribute, 2, g_Context.FLOAT, false, 0, 0);
-    g_Context.drawArrays(g_Context.TRIANGLE_FAN, 0, vert.length/2);
+
+
+    g_Context.drawArrays(g_Context.TRIANGLE_FAN, 0, vert.length / 2);
+
 }
 
 function LoadImageToTexture(data)
@@ -86,10 +94,26 @@ function LoadImageToTexture(data)
 
 }
 
-function LoadImageToTextureFromUrl(url)
+function LoadImageToTextureFromUrl(url, textureCoord)
 {
     if (url.constructor.name !== "String")
         throw new Error("Invalid url type expected: String");
+    if (textureCoord.constructor.name !== "Float32Array")
+        throw new Error("Invalid textureCoord type expected: Float32Array");
+
+    if (g_samplerUniform === -1)
+        throw new Error("shader does not support texture");
+
+    function isPowerOf2(value)
+    {
+        return (value & (value - 1)) === 0;
+    }
+
+    function Texture(textureNo, textureCoordBufferNo)
+    {
+        this.textureNo = textureNo;
+        this.textureCoordBufferNo = textureCoordBufferNo;
+    }
 
     var
         textureNo = g_Context.createTexture(),
@@ -100,14 +124,13 @@ function LoadImageToTextureFromUrl(url)
         pictureFormat = g_Context.RGBA,
         pictureType = g_Context.UNSIGNED_BYTE,
         pixels = new Uint8Array([0, 0, 255, 255]),
-        image = new Image();
+        image = new Image(),
+        texCoordBufferNo = g_Context.createBuffer();
 
-    function isPowerOf2(value)
-    {
-        return (value & (value - 1)) === 0;
-    }
+    g_Context.bindBuffer(g_Context.ARRAY_BUFFER, texCoordBufferNo);
+    g_Context.bufferData(g_Context.ARRAY_BUFFER, textureCoord, g_Context.STATIC_DRAW);
 
-    g_Context.bindTexture(g_Context.GL_TEXTURE, textureNo);
+    g_Context.bindTexture(g_Context.TEXTURE_2D, textureNo);
     g_Context.texImage2D(g_Context.TEXTURE_2D,
         level,
         pictureFormat,
@@ -117,31 +140,9 @@ function LoadImageToTextureFromUrl(url)
         pictureType,
         pixels);
 
-    image.onload = function ()
-    {
-        g_Context.bindTexture(g_Context.GL_TEXTURE, textureNo);
-        g_Context.texImage2D(g_Context.GL_TEXTURE,
-            level,
-            pictureFormat,
-            pictureFormat,
-            pictureType,
-            image);
-        if (isPowerOf2(image.width) && isPowerOf2(image.height))
-        {
-            g_Context.generateMipmap(g_Context.TEXTURE_2D);
-        }
-        else
-        {
-            // No, it's not a power of 2. Turn off mips and set
-            // wrapping to clamp to edge
-            g_Context.texParameteri(g_Context.TEXTURE_2D, g_Context.TEXTURE_WRAP_S, g_Context.CLAMP_TO_EDGE);
-            g_Context.texParameteri(g_Context.TEXTURE_2D, g_Context.TEXTURE_WRAP_T, g_Context.CLAMP_TO_EDGE);
-            g_Context.texParameteri(g_Context.TEXTURE_2D, g_Context.TEXTURE_MIN_FILTER, g_Context.LINEAR);
-        }
-    };
-    image.src = url;
+  
 
-    return textureNo;
+    return new Texture(textureNo, texCoordBufferNo);
 
 }
 
@@ -150,22 +151,44 @@ function InitWebGL()
     var
         program = ShaderCompile(
             `attribute vec2 a_position;
+             attribute vec2 a_textureCoord;
+
+            varying vec2 v_textureCoord;
+
             void main(void) {
               gl_Position = vec4(a_position, 0.0, 1.0);
+              v_textureCoord = a_textureCoord;
             }`,
-            `void main(void) {
-              gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);
+            `precision mediump float;
+            // Passed in from the vertex shader.
+            varying vec2 v_textureCoord;
+
+            // The texture.
+            uniform sampler2D u_sampler;
+
+            void main() {
+               gl_FragColor = texture2D(u_sampler, v_textureCoord);
             }`),
-        vert = null;
+        vert = null,
+        tex = null;
 
     g_Context.useProgram(program);
-    vert = LoadVertex(new Float32Array([
+    vert = LoadVertex(
+        new Float32Array([
             -1.0, -1.0,
             +1.0, -1.0,
             +1.0, +1.0,
             -1.0, +1.0
         ]));
-    Draw(vert);
+    tex = LoadImageToTextureFromUrl("",
+        new Float32Array([
+            0, 1,
+            1, 1,
+            0, 0,
+            1, 0
+        ]));
+
+    Draw(vert, tex);
 
 }
 
