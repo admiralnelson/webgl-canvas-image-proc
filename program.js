@@ -275,7 +275,7 @@ float Gaussian (float sigma, float x)
 
 vec3 BlurredPixel (in vec2 uv)
 {
-    float c_sigmaX      =  5.0;
+    float c_sigmaX      =  0.75;
 	float c_sigmaY      = c_sigmaX;
     
     float total = 0.0;
@@ -299,9 +299,10 @@ vec3 BlurredPixel (in vec2 uv)
 
             void main() {
                 vec4 col  = texture2D(u_sampler, v_textureCoord) ;
-                //vec4 bwCol = vec4( vec3(col.r), 1.0 );
+               //vec4 bwCol = vec4( vec3((col.r + col.g + col.b)/3.0), 1.0 );
                //gl_FragColor =  BlurH(u_sampler, vec2(1980.0, 1080.0), v_textureCoord, 20.0);//bwCol;
                gl_FragColor = vec4(BlurredPixel(v_textureCoord), 1.0);
+			   //gl_FragColor = bwCol;
             }`),
         vert = null,
         tex = null;
