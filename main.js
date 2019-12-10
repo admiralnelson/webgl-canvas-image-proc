@@ -1,23 +1,28 @@
-main();
+let clearData;
 
-const histogram_R = [];
-
-function main() {
+function main(imgDataBlob) {
+	
+	const isExecuted = [false, false, false];
 	
 	const img = new Image();
-	// img.src = './assets/my_img.jpg';
-	// img.src = './assets/ktm.jpg';
-	img.src = './assets/medi_pic.jpg';
-	
+	img.src = URL.createObjectURL(imgDataBlob);
 	const canvas = document.getElementById('canvas');
 	const context = canvas.getContext('2d');
+
+	clearData = () => {
+		updateLog("New file detected!");
+		for (let i = 0; i < isExecuted.length; i++) {
+			isExecuted[i] = true;
+		}
+	};
 	
 	img.onload = () => {
 		canvas.width = img.width;
 		canvas.height = img.height;
 		const tx = performance.now();
 		context.drawImage(img, 0, 0);
-		console.log("Load time image took " + (performance.now() - tx) + " ms");
+		updateLog("Load time image took " + (performance.now() - tx) + " ms");
+		updateLog("Image Dimension: " +  img.width + ", " + img.height);
 		const imageData = context.getImageData(0, 0, img.width, img.height);
 		const data = imageData.data;
 		
@@ -32,125 +37,196 @@ function main() {
 			}
 			
 			context.putImageData(imageData, 0, 0);
-			console.log("function grayscale execute took " + (performance.now() - t0) + " ms");
+			updateLog("function grayscale execute took " + (performance.now() - t0) + " ms");
 		};
 		
-		const experiment = () => {
+		const histogram = () => {
 			const t0 = performance.now();
-			// const histogram_R = [];
-			let minIndex = 0;
-			let maxIndex = 0;
+
+			let histogram_R = [];
+			let histogram_G = [];
+			let histogram_B = [];
 			
-			// Count
-			for (let y = 0; y < img.height; y++) {
-				for (let x = 0; x < img.width; x++) {
-					let index = (x + y * img.width) * 4; // Position
-					if (isNaN(histogram_R[data[index]])) {
-						histogram_R[data[index]] = 1;
-					}
-					else {
-						histogram_R[data[index]] += 1;
-					}
-				}
-			}
-			
-			let maxValue = histogram_R[0];
-			let minValue = histogram_R[0];
-			for (let i = 0; i < histogram_R.length; i ++) {
-				const value = histogram_R[i];
-				if (value > maxValue) {
-					maxValue = value;
-					maxIndex = i;
-				}
-				if (value < minValue) {
-					minValue = value;
-					minIndex = i;
-				}
+			for (let i = 0; i < data.length; i += 4) {
+				histogram_R[data[i]] = isNaN(histogram_R[data[i]]) ? 1 : (histogram_R[data[i]] + 1);
+				histogram_G[data[i+1]] = isNaN(histogram_G[data[i+1]]) ? 1 : (histogram_G[data[i+1]] + 1);
+				histogram_B[data[i+2]] = isNaN(histogram_B[data[i+2]]) ? 1 : (histogram_B[data[i+2]] + 1);
 			}
 			
 			context.putImageData(imageData, 0, 0);
-			
-			console.log("function experiment execute took " + (performance.now() - t0) + " ms");
-			console.log(`[${minIndex}] ${minValue}, [${maxIndex}] ${maxValue}`);
-			console.log(histogram_R);
-			
-			// const bb1 = 0;
-			// const ba1 = 30;
-			// const bb2 = 0;
-			// const ba2 = 200;
-			// window.event.on
+			updateLog("function histogram execute took " + (performance.now() - t0) + " ms");
+
+			// Display BarChart
+			let labelColorIdx = [];
+			for (let i = 0; i < 256; i++) {
+				labelColorIdx.push(i);
+			}
+			const ctxChart = document.getElementById('myChart').getContext('2d');
+			const myBarChart = new Chart(ctxChart, {
+				type: 'bar',
+				data: {
+					labels: labelColorIdx,
+					datasets: [
+						{
+							label: 'Red',
+							backgroundColor: 'rgb(231, 76, 60)',
+							borderColor: 'rgb(192, 57, 43)',
+							data: histogram_R
+						},
+						{
+							label: 'Green',
+							backgroundColor: 'rgb(46, 204, 113)',
+							borderColor: 'rgb(39, 174, 96)',
+							data: histogram_G
+						},
+						{
+							label: 'Blue',
+							backgroundColor: 'rgb(52, 152, 219)',
+							borderColor: 'rgb(41, 128, 185)',
+							data: histogram_B
+						}
+					]
+				},
+				options: {
+					title: {
+						display: true,
+						text: 'Histogram'
+					}
+				}
+			});
 		};
-		
-		const grayscalebtn = document.getElementById('grayscalebtn');
-		grayscalebtn.addEventListener('click', experiment);
+
+		const convolution = () => {
+			const gaussianFilter = [
+				1/9, 1/9, 1/9,
+				1/9, 1/9, 1/9,
+				1/9, 1/9, 1/9
+			];
+			
+			const t0 = performance.now();
+			
+			for (let i = 0; i < data.length; i += 4) {
+				let sumR, sumG, sumB = 0;
+				const r = i;
+				const g = i + 1;
+				const b = i + 2;
+				let r0, r1, r2, r3, r4, r5, r6, r7, r8 = 0;
+				let g0, g1, g2, g3, g4, g5, g6, g7, g8 = 0;
+				let b0, b1, b2, b3, b4, b5, b6, b7, b8 = 0;
+				const w = img.width * 4;
+				
+				// Red
+				r0 = isNaN(data[r - w - 4]) ? 0 : (data[r - w - 4] * gaussianFilter[0]);
+				r1 = isNaN(data[r - w]) ? 0 : (data[r - w] * gaussianFilter[1]);
+				r2 = isNaN(data[r - w + 4]) ? 0 : (data[r - w + 4] * gaussianFilter[2]);
+
+				r3 = isNaN(data[r - 4])? 0 : (data[r - 4] * gaussianFilter[3]);
+				r4 = isNaN(data[r]) ? 0 : (data[r] * gaussianFilter[4]);
+				r5 = isNaN(data[r + 4]) ? 0 : (data[r + 4] * gaussianFilter[5]);
+
+				r6 = isNaN(data[r + w - 4]) ? 0 : (data[r + w - 4] * gaussianFilter[6]);
+				r7 = isNaN(data[r + w]) ? 0 : (data[r + w] * gaussianFilter[7]);
+				r8 = isNaN(data[r + w + 4]) ? 0 : (data[r + w + 4] * gaussianFilter[8]);
+				sumR = r0 + r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8;
+				data[r] = Math.ceil(sumR);
+
+				// Green
+				g0 = isNaN(data[g - w - 4]) ? 0 : (data[g - w - 4] * gaussianFilter[0]);
+				g1 = isNaN(data[g - w]) ? 0 : (data[g - w] * gaussianFilter[1]);
+				g2 = isNaN(data[g - w + 4]) ? 0 : (data[g - w + 4] * gaussianFilter[2]);
+
+				g3 = isNaN(data[g - 4])? 0 : (data[g - 4] * gaussianFilter[3]);
+				g4 = isNaN(data[g]) ? 0 : (data[g] * gaussianFilter[4]);
+				g5 = isNaN(data[g + 4]) ? 0 : (data[g + 4] * gaussianFilter[5]);
+
+				g6 = isNaN(data[g + w - 4]) ? 0 : (data[g + w - 4] * gaussianFilter[6]);
+				g7 = isNaN(data[g + w]) ? 0 : (data[g + w] * gaussianFilter[7]);
+				g8 = isNaN(data[g + w + 4]) ? 0 : (data[g + w + 4] * gaussianFilter[8]);
+				sumG = g0 + g1 + g2 + g3 + g4 + g5 + g6 + g7 + g8;
+				data[g] = Math.ceil(sumG);
+
+				// Blue
+				b0 = isNaN(data[b - w - 4]) ? 0 : (data[b - w - 4] * gaussianFilter[0]);
+				b1 = isNaN(data[b - w]) ? 0 : (data[b - w] * gaussianFilter[1]);
+				b2 = isNaN(data[b - w + 4]) ? 0 : (data[b - w + 4] * gaussianFilter[2]);
+
+				b3 = isNaN(data[b - 4])? 0 : (data[b - 4] * gaussianFilter[3]);
+				b4 = isNaN(data[b]) ? 0 : (data[b] * gaussianFilter[4]);
+				b5 = isNaN(data[b + 4]) ? 0 : (data[b + 4] * gaussianFilter[5]);
+
+				b6 = isNaN(data[b + w - 4]) ? 0 : (data[b + w - 4] * gaussianFilter[6]);
+				b7 = isNaN(data[b + w]) ? 0 : (data[b + w] * gaussianFilter[7]);
+				b8 = isNaN(data[b + w + 4]) ? 0 : (data[b + w + 4] * gaussianFilter[8]);
+				sumB = b0 + b1 + b2 + b3 + b4 + b5 + b6 + b7 + b8;
+				data[b] = Math.ceil(sumB);
+			}
+
+			context.putImageData(imageData, 0, 0);
+			updateLog("function gaussian blur execute took " + (performance.now() - t0) + " ms");
+		};
+
+		// Button
+		const executeBtn = document.getElementById('executeBtn');
+		executeBtn.addEventListener('click', () => {
+			const pickedMethod = document.getElementById('methods');
+			let methodValue = "grayscale";
+			for (method of pickedMethod) {
+				if (method.checked) {
+					methodValue = method.value;
+					break;
+				}
+			}
+			switch (methodValue) {
+				case "grayscale":
+					if (!isExecuted[0]) {
+						updateLog("processing grayscale...");
+						grayscale();
+						isExecuted[0] = true;
+					}
+					break;
+				case "histogram":
+					if (!isExecuted[1]) {
+						updateLog("processing histogram...");
+						histogram();
+						isExecuted[1] = true;
+					}
+					break;
+				case "gaussianblur":
+					if (!isExecuted[2]) {
+						updateLog("processing gaussian blur...");
+						convolution();
+						isExecuted[2] = true;
+					}
+					break;
+				default:
+					console.warn("Nothing method of " + methodValue);
+					break;
+			}
+		});
 	};
 	
 }
 
-window.addEventListener('chart', () => {
-	google.charts.load('44', {
-		callback: drawBackgroundColor,
-		packages: ['corechart']
-	});
-});
-
-function drawBackgroundColor() {
-	
-	console.log(histogram_R.length);
-	
-	let c = [
-		[0, 3],
-		[1, 10],
-		[2, 23],
-		[3, 59],
-		[4, 34],
-		[5, 29],
-	];
-
-	let data = new google.visualization.DataTable();
-	data.addColumn('number', 'Color');
-	data.addColumn('number', 'Value');
-
-	data.addRows(c);
-
-	let options = {
-		hAxis: {
-			title: 'RGB'
-		},
-		vAxis: {
-			title: 'Density'
-		},
-		backgroundColor: '#f1f8e9'
-	};
-
-	let chart = new google.visualization.LineChart(document.getElementById('yo'));
-	chart.draw(data, options);
+function clearAll() {
+	if (clearData) {
+		clearData();
+	}
 }
 
 function getFile() {
 	const file = document.getElementById("myFile");
-	const FILENAME = file.value.substring(12);
-	if (FILENAME) {
-		const CURR_DIR = "./assets/";
-		const FULLPATH = CURR_DIR + FILENAME;
-		console.log(FULLPATH);
+	if (file.files[0]) {
+		clearAll();
+		console.log(file.files[0]);
+		updateLog("Loading image...");
+		main(file.files[0]);
 	}
 	else {
-		console.warn('Browse image file first!');
+		updateLog("Nothing file to executed!");
 	}
 }
 
-function resizeImageViewer(event) {
-	const param = event.currentTarget;
-	const canvas = document.getElementById('canvas');
-	canvas.width = param.imgWidth;
-	canvas.height = param.imgHeight;
-	
-	const ctx = canvas.getContext('2d');
-	let image = new Image();
-	
-	image.addEventListener('load', function () {
-		ctx.drawImage(this, 0, 0, canvas.width, canvas.height);
-	});
-	image.src = param.url;
+function updateLog(message) {
+	const logElement = document.getElementById('log');
+	logElement.innerHTML += " >> " + message + "<br>";
 }
