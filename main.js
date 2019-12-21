@@ -98,9 +98,9 @@ function main(imgDataBlob) {
 
 		const convolution = () => {
 			const gaussianFilter = [
-				1/9, 1/9, 1/9,
-				1/9, 1/9, 1/9,
-				1/9, 1/9, 1/9
+				1/16, 2/16, 1/16,
+				2/16, 4/16, 2/16,
+				1/16, 2/16, 1/16
 			];
 			
 			const t0 = performance.now();
