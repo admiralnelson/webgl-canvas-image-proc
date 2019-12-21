@@ -8,3 +8,5 @@ Cara cepat install dan pakai
 - Jika telah selesai, langsung menuju direktori
 - pada CMD: `$ live-server`
 - Akan ada popup browser dari localhost
+- `canvas.htm` untuk proses dengan Canvas (CPU)
+- `index.htm` untuk proses dengan WebGL (GPU)
