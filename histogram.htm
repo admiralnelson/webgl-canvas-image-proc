@@ -1,0 +1,99 @@
+﻿<!DOCTYPE html>
+
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta charset="utf-8" />
+    <title></title>
+</head>
+<body>
+	<script id="hist-vs" type="not-js">
+	attribute float pixelId;
+
+	uniform vec2 u_resolution;
+	uniform sampler2D u_texture;
+	uniform vec4 u_colorMult;
+
+	void main() {
+	  // based on an id (0, 1, 2, 3 ...) compute the pixel x, y for the source image
+	  vec2 pixel = vec2(mod(pixelId, 
+	  u_resolution.x), floor(pixelId / u_resolution.x));
+
+	  // compute corresponding uv center of that pixel
+	  vec2 uv = (pixel + 0.5) / u_resolution;
+
+	  // get the pixels but 0 out channels we don't want
+	  vec4 color = texture2D(u_texture, uv) * u_colorMult;
+
+	  // add up all the channels. Since 3 are zeroed out we'll get just one channel
+	  float colorSum = color.r + color.g + color.b + color.a;
+
+	  // set the position to be over a single pixel in the 256x1 destination texture
+	  gl_Position = vec4((colorSum * 255.0 + 0.5) / 256.0 * 2.0 - 1.0, 0.5, 0, 1);
+
+	  gl_PointSize = 1.0;
+	}
+	</script>
+	<script id="hist-fs" type="not-js">
+	precision mediump float;
+
+	void main() {
+	  gl_FragColor = vec4(1);
+	}
+	</script>
+	<script id="max-fs" type="not-js">
+	precision mediump float;
+
+	uniform sampler2D u_texture;
+
+	void main() {
+	  vec4 maxColor = vec4(0);
+
+	  // we know the texture is 256x1 so just go over the whole thing
+	  for (int i = 0; i < 256; ++i) {
+		// compute centers of pixels
+		vec2 uv = vec2((float(i) + 0.5) / 256.0, 0.5);
+
+		// get max value of pixel
+		maxColor = max(maxColor, texture2D(u_texture, uv));
+	  }
+
+	  gl_FragColor = maxColor;
+	}
+	</script>
+	<script id="show-vs" type="not-js">
+	attribute vec4 position;
+	void main() {
+	  gl_Position = position;
+	}
+	</script>
+	<script id="show-fs" type="not-js">
+	precision mediump float;
+
+	uniform sampler2D u_histTexture;
+	uniform vec2 u_resolution;
+	uniform sampler2D u_maxTexture;
+
+	void main() {
+	  // get the max color constants
+	  vec4 maxColor = texture2D(u_maxTexture, vec2(0));
+
+	  // compute our current UV position
+	  vec2 uv = gl_FragCoord.xy / u_resolution;
+
+	  // Get the history for this color
+	  // (note: since u_histTexture is 256x1 uv.y is irrelevant
+	  vec4 hist = texture2D(u_histTexture, uv);
+
+	  // scale by maxColor so scaled goes from 0 to 1 with 1 = maxColor
+	  vec4 scaled = hist / maxColor;
+
+	  // 1 > maxColor, 0 otherwise
+	  vec4 color = step(uv.yyyy, scaled);
+
+	  gl_FragColor = vec4(color.rgb, 1);
+	}
+	</script>
+	<script src="https://twgljs.org/dist/twgl-full.min.js"></script>
+	<script src="histogram.js"></script>
+</body>
+</html>
