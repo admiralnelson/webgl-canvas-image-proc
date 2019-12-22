@@ -16,53 +16,58 @@ function main(imgDataBlob) {
 		}
 	};
 	
-	img.onload = () => {
+	img.onload = () => { // After success load image
 		canvas.width = img.width;
 		canvas.height = img.height;
+
 		const tx = performance.now();
 		context.drawImage(img, 0, 0);
-		updateLog("Load time image took " + (performance.now() - tx) + " ms");
-		updateLog("Image Dimension: " +  img.width + ", " + img.height);
-		const imageData = context.getImageData(0, 0, img.width, img.height);
-		const data = imageData.data;
+		updateLog("Load time image took " + (performance.now() - tx) + " ms"); // Render load time
+		updateLog("Image Dimension: " +  img.width + ", " + img.height); // Dimension information
+
+		const imageData = context.getImageData(0, 0, img.width, img.height); // Get image context
+		const data = imageData.data; // Get pixel data from image
 		
 		const grayscale = () => {
-			const t0 = performance.now();
+			const t0 = performance.now(); // Track the time
 			
 			for (let i = 0; i < data.length; i += 4) {
-				const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-				data[i] = avg; // R
-				data[i + 1] = avg; // G
-				data[i + 2] = avg; // B
+				const avg = (data[i] + data[i + 1] + data[i + 2]) / 3; // do AVG
+				data[i] = avg; // Red
+				data[i + 1] = avg; // Green
+				data[i + 2] = avg; // Blue
+				// data[i+3] is alpha properties
 			}
 			
-			context.putImageData(imageData, 0, 0);
-			updateLog("function grayscale execute took " + (performance.now() - t0) + " ms");
+			context.putImageData(imageData, 0, 0); // Implement to canvas
+			updateLog("function grayscale execute took " + (performance.now() - t0) + " ms"); // Execute time passed
 		};
 		
 		const histogram = () => {
-			const t0 = performance.now();
+			const t0 = performance.now(); // Track the time
 
+			// Count container for RGB
 			let histogram_R = [];
 			let histogram_G = [];
 			let histogram_B = [];
 			
 			for (let i = 0; i < data.length; i += 4) {
+				// If pixel data is never be counted then set value to 1, else do increment
 				histogram_R[data[i]] = isNaN(histogram_R[data[i]]) ? 1 : (histogram_R[data[i]] + 1);
 				histogram_G[data[i+1]] = isNaN(histogram_G[data[i+1]]) ? 1 : (histogram_G[data[i+1]] + 1);
 				histogram_B[data[i+2]] = isNaN(histogram_B[data[i+2]]) ? 1 : (histogram_B[data[i+2]] + 1);
 			}
 			
-			context.putImageData(imageData, 0, 0);
-			updateLog("function histogram execute took " + (performance.now() - t0) + " ms");
+			context.putImageData(imageData, 0, 0); // Implement to canvas
+			updateLog("function histogram execute took " + (performance.now() - t0) + " ms"); // Execute time passed
 
-			// Display BarChart
+			// Display BarChart with library Chart.js
 			let labelColorIdx = [];
 			for (let i = 0; i < 256; i++) {
 				labelColorIdx.push(i);
 			}
 			const ctxChart = document.getElementById('myChart').getContext('2d');
-			const myBarChart = new Chart(ctxChart, {
+			const myBarChart = new Chart(ctxChart, { // Showing RGB Chart
 				type: 'bar',
 				data: {
 					labels: labelColorIdx,
@@ -97,40 +102,44 @@ function main(imgDataBlob) {
 		};
 
 		const convolution = () => {
-			const gaussianFilter = [
+			const gaussianFilter = [ // Filter or Kernel that used in convolution
 				1/16, 2/16, 1/16,
 				2/16, 4/16, 2/16,
 				1/16, 2/16, 1/16
 			];
 			
-			const t0 = performance.now();
+			const t0 = performance.now(); // Track the time
 			
-			for (let i = 0; i < data.length; i += 4) {
-				let sumR, sumG, sumB = 0;
+			for (let i = 0; i < data.length; i += 4) { // Do iterate to all pixels
+				// Init variable
+				let sumR, sumG, sumB = 0; // Data that will implement for every pixel in center
 				const r = i;
 				const g = i + 1;
 				const b = i + 2;
+				// Init the map for kernel operation
+				// Map dimension is 3x3, for every r, g, and b
 				let r0, r1, r2, r3, r4, r5, r6, r7, r8 = 0;
 				let g0, g1, g2, g3, g4, g5, g6, g7, g8 = 0;
 				let b0, b1, b2, b3, b4, b5, b6, b7, b8 = 0;
+				// Width of image times RGBA, for calibrate the map position in array
 				const w = img.width * 4;
 				
-				// Red
-				r0 = isNaN(data[r - w - 4]) ? 0 : (data[r - w - 4] * gaussianFilter[0]);
-				r1 = isNaN(data[r - w]) ? 0 : (data[r - w] * gaussianFilter[1]);
-				r2 = isNaN(data[r - w + 4]) ? 0 : (data[r - w + 4] * gaussianFilter[2]);
+				// Red operation
+				r0 = isNaN(data[r - w - 4]) ? 0 : (data[r - w - 4] * gaussianFilter[0]); // Left top
+				r1 = isNaN(data[r - w]) ? 0 : (data[r - w] * gaussianFilter[1]); // Top center
+				r2 = isNaN(data[r - w + 4]) ? 0 : (data[r - w + 4] * gaussianFilter[2]); // Right top
 
-				r3 = isNaN(data[r - 4])? 0 : (data[r - 4] * gaussianFilter[3]);
-				r4 = isNaN(data[r]) ? 0 : (data[r] * gaussianFilter[4]);
-				r5 = isNaN(data[r + 4]) ? 0 : (data[r + 4] * gaussianFilter[5]);
+				r3 = isNaN(data[r - 4])? 0 : (data[r - 4] * gaussianFilter[3]); // Left center
+				r4 = isNaN(data[r]) ? 0 : (data[r] * gaussianFilter[4]); // Center
+				r5 = isNaN(data[r + 4]) ? 0 : (data[r + 4] * gaussianFilter[5]); // Right center
 
-				r6 = isNaN(data[r + w - 4]) ? 0 : (data[r + w - 4] * gaussianFilter[6]);
-				r7 = isNaN(data[r + w]) ? 0 : (data[r + w] * gaussianFilter[7]);
-				r8 = isNaN(data[r + w + 4]) ? 0 : (data[r + w + 4] * gaussianFilter[8]);
-				sumR = r0 + r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8;
-				data[r] = Math.ceil(sumR);
+				r6 = isNaN(data[r + w - 4]) ? 0 : (data[r + w - 4] * gaussianFilter[6]); // Left bottom
+				r7 = isNaN(data[r + w]) ? 0 : (data[r + w] * gaussianFilter[7]); // Bottom center
+				r8 = isNaN(data[r + w + 4]) ? 0 : (data[r + w + 4] * gaussianFilter[8]); // Right bottom
+				sumR = r0 + r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8; // Sum of all operation
+				data[r] = Math.ceil(sumR); // Implement to pixel data in Red
 
-				// Green
+				// Green operation
 				g0 = isNaN(data[g - w - 4]) ? 0 : (data[g - w - 4] * gaussianFilter[0]);
 				g1 = isNaN(data[g - w]) ? 0 : (data[g - w] * gaussianFilter[1]);
 				g2 = isNaN(data[g - w + 4]) ? 0 : (data[g - w + 4] * gaussianFilter[2]);
@@ -145,7 +154,7 @@ function main(imgDataBlob) {
 				sumG = g0 + g1 + g2 + g3 + g4 + g5 + g6 + g7 + g8;
 				data[g] = Math.ceil(sumG);
 
-				// Blue
+				// Blue operation
 				b0 = isNaN(data[b - w - 4]) ? 0 : (data[b - w - 4] * gaussianFilter[0]);
 				b1 = isNaN(data[b - w]) ? 0 : (data[b - w] * gaussianFilter[1]);
 				b2 = isNaN(data[b - w + 4]) ? 0 : (data[b - w + 4] * gaussianFilter[2]);
@@ -161,8 +170,8 @@ function main(imgDataBlob) {
 				data[b] = Math.ceil(sumB);
 			}
 
-			context.putImageData(imageData, 0, 0);
-			updateLog("function gaussian blur execute took " + (performance.now() - t0) + " ms");
+			context.putImageData(imageData, 0, 0); // Implement to canvas
+			updateLog("function gaussian blur execute took " + (performance.now() - t0) + " ms"); // Execute time passed
 		};
 
 		// Button
@@ -219,7 +228,7 @@ function getFile() {
 		clearAll();
 		console.log(file.files[0]);
 		updateLog("Loading image...");
-		main(file.files[0]);
+		main(file.files[0]); // Execute picked file
 	}
 	else {
 		updateLog("Nothing file to executed!");
